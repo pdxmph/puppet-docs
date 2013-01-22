@@ -1,5 +1,6 @@
-source "http://gems.rubyforge.org"
-source "http://gemcutter.org"
+source :rubyforge
+
+puppet_version = ENV['VERSION']
 
 gem 'jekyll', :git => 'git://github.com/puppetlabs/jekyll.git', :branch => 'puppetdocs'
 gem 'maruku'
@@ -11,3 +12,5 @@ gem 'rdoc'
 gem 'rake'
 gem 'vlad'
 gem 'facter'
+gem 'hiera'
+gem 'puppet', puppet_version

@@ -173,7 +173,7 @@ namespace :references do
   end
 
   namespace :puppetdoc do
-
+    system('bundle update puppet')
     references.each do |name|
       desc "Write references/VERSION/#{name}"
       task name => 'references:check_version' do
