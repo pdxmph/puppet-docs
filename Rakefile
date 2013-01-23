@@ -5,9 +5,9 @@ require 'pathname'
 require 'fileutils'
 
 
-Dir.glob(File.join("vendor", "gems", "*", "lib")).each do |lib|
-  $LOAD_PATH.unshift(File.expand_path(lib))
-end
+# Dir.glob(File.join("vendor", "gems", "*", "lib")).each do |lib|
+#   $LOAD_PATH.unshift(File.expand_path(lib))
+# end
 
 begin
   require "vlad"
@@ -173,7 +173,7 @@ namespace :references do
   end
 
   namespace :puppetdoc do
-    system('bundle update puppet')
+    #system('bundle install')
     references.each do |name|
       desc "Write references/VERSION/#{name}"
       task name => 'references:check_version' do
