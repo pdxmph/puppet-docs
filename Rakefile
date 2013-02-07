@@ -25,23 +25,33 @@ source_dir = "#{top_dir}/source"
 stash_dir = "#{top_dir}/_stash"
 preview_dir = "#{top_dir}/_preview"
 
+
 desc "Move all other directories other than the one currently being worked on to a temporary stash location (stash) so regenerating the site happens much more quickly. Run a preview server."
 task :preview, :filename do |t, args|
 
   # Make sure we have a stash_directory
   FileUtils.mkdir(stash_dir) unless File.exist?(stash_dir)
 
-  # List the files and directories we need to build templates, etc.   
   required_dirs = ["_config.yml", "_includes", "_plugins", "files", "favicon.ico", "_layouts","images"]
 
+  # List the files and directories we need to build templates, etc.
   Dir.glob("#{source_dir}/*") do |directory|
     FileUtils.mv directory, stash_dir unless directory.include?(args.filename) || required_dirs.include?(File.basename(directory))
   end
 
-  Dir.chdir(source_dir)
+  active_dir = "#{source_dir}/#{args.filename}"
 
-  # Run our preview server, watching ... watching ... 
-  system("bundle exec jekyll #{source_dir} #{preview_dir} --kramdown --auto --serve")
+  Dir.chdir(active_dir)
+
+  file_list = Dir.glob("**/*")
+
+  file_list.each do |f|
+    html_name = f.gsub(/\.markdown/,'.html')
+    puts "<li><a href='/#{args.filename}/#{html_name}'>#{html_name}</a></li>"
+  end
+
+  # Run our preview server, watching ... watching ...
+  #  system("bundle exec jekyll #{source_dir} #{preview_dir} --kramdown --auto --serve")
   puts "\n\n*** Shut down the server."
 
   # Clean up on exit of the preview (user ctrl-c's)
@@ -56,6 +66,7 @@ task :unpreview do
   FileUtils.rm_rf(preview_dir)
   puts "\n*** Done.\n\n"
 end
+
 
 namespace :externalsources do
 
@@ -73,7 +84,7 @@ namespace :externalsources do
   def repo_name(repo_url)
     repo_url.split('/')[-1].sub(/\.git$/, '')
   end
-  
+
   # "Update all working copies defined in source/_config.yml"
   task :update do
     Rake::Task['externalsources:clone'].invoke
@@ -116,8 +127,8 @@ namespace :externalsources do
       FileUtils.ln_sf "#{top_dir}/externalsources/#{name}/#{info['subdirectory']}", "source#{info['url']}"
     end
   end
-  
-  # "Clean up any external source symlinks from the source directory" # In the current implementation, all external sources are symlinks and there are no other symlinks in the source. This means we can naively kill all symlinks in ./source. 
+
+  # "Clean up any external source symlinks from the source directory" # In the current implementation, all external sources are symlinks and there are no other symlinks in the source. This means we can naively kill all symlinks in ./source.
   task :clean do
     system("find ./source -type l -print0 | xargs -0 rm")
   end
@@ -126,8 +137,8 @@ end
 desc "Generate the documentation"
 task :generate do
   Rake::Task['externalsources:update'].invoke # Create external sources if necessary, and check out the required working directories
-  Rake::Task['externalsources:link'].invoke # Link docs folders from external sources into the source at the appropriate places. 
-  
+  Rake::Task['externalsources:link'].invoke # Link docs folders from external sources into the source at the appropriate places.
+
   system("mkdir -p output")
   system("rm -rf output/*")
   system("mkdir output/references")
