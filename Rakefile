@@ -21,6 +21,42 @@ $LOAD_PATH.unshift File.expand_path('lib')
 references = %w(configuration function indirection metaparameter report type developer)
 top_dir = Dir.pwd
 
+source_dir = "#{top_dir}/source"
+stash_dir = "#{top_dir}/_stash"
+preview_dir = "#{top_dir}/_preview"
+
+desc "Move all other directories other than the one currently being worked on to a temporary stash location (stash) so regenerating the site happens much more quickly. Run a preview server."
+task :preview, :filename do |t, args|
+
+  # Make sure we have a stash_directory
+  FileUtils.mkdir(stash_dir) unless File.exist?(stash_dir)
+
+  # List the files and directories we need to build templates, etc.   
+  required_dirs = ["_config.yml", "_includes", "_plugins", "files", "favicon.ico", "_layouts","images"]
+
+  Dir.glob("#{source_dir}/*") do |directory|
+    FileUtils.mv directory, stash_dir unless directory.include?(args.filename) || required_dirs.include?(File.basename(directory))
+  end
+
+  Dir.chdir(source_dir)
+
+  # Run our preview server, watching ... watching ... 
+  system("bundle exec jekyll #{source_dir} #{preview_dir} --kramdown --auto --serve")
+  puts "\n\n*** Shut down the server."
+
+  # Clean up on exit of the preview (user ctrl-c's)
+  Rake::Task['unpreview'].invoke
+
+end
+
+desc "Move all stashed directories back into the source directory, ready for site generation. "
+task :unpreview do
+  puts "\n*** Putting back the stashed files, removing the preview directory."
+  FileUtils.mv Dir.glob("#{stash_dir}/*"), "#{source_dir}"
+  FileUtils.rm_rf(preview_dir)
+  puts "\n*** Done.\n\n"
+end
+
 namespace :externalsources do
 
   unless File.exists?("externalsources") && File.directory?("externalsources")
