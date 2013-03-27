@@ -213,13 +213,14 @@ Unlike kermit and grover, for which we had slightly different but node-specific 
 
 ## Adding a Class to a Node With Hiera
 
-- hiera include
+
+- need to assign the ntp class to kermit, grover and snuffy explicitly so we can then show the change that allows us to move that assignment into hiera data sources
+- hiera include 
 
 ## 
 
 
 ## Case 2. Universal Truth
-
 
 Modify the hierarchy to include osfamily:
 
@@ -239,7 +240,6 @@ add to hierarchy:
 
 
 
-	
 ### `osfamily/%{::osfamily}.json`
 
 **Remove the stuff that's organizational, keep the stuff that's pertinent to the distro**
@@ -266,5 +266,6 @@ add to hierarchy:
 
 
 
+## Scraps 
 
 > **JSON or YAML?** Out of the box, Hiera supports both YAML and JSON files as data sources. Both work fine, so choosing one is a question of personal preference. We went with JSON, but that doesn't constitute a recommendation. We do recommend you stick to one or the other for simplicity's sake.
