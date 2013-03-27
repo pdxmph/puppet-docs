@@ -41,31 +41,29 @@ Most of these parameters reflect decisions we have to make about each of the nod
 
 Without Hiera, these all represent decisions we would make using conditional logic in our site and node manifests. With Hiera, we can move these decisions into a hierarchy built around the facts that drive these decisions: We can use the fully qualified domain name (`fqdn`) fact to identify the hosts we want to act as ntp servers for our organization, restricting how willing we are to let Puppet update their packages since they're key to our infrastructure. We can use whether or not they're virtual machines (the `is_virtual` fact) to enable or disable the ntp service if we happen to let guest operating systems get their time settings from their host systems.
 
-Making these sorts of decisions --- decisions that are specific to an individual organization --- is the main strength of Hiera. You can use Hiera for these sorts of decisions right away, without having to rewrite a single line of your module. Using Hiera data sources to organize these decisions makes it easier to share a module with others: You can keep "organizational truth" in Hiera, independent of your module code. 
+Making these sorts of decisions --- decisions that are specific to an individual organization --- then expressing them in a hierarchy is the main strength of Hiera. You can use Hiera for these sorts of decisions right away, without having to rewrite a single line of your module. Also, using Hiera data sources to organize these decisions makes it easier to share a module with others: You can keep "organizational truth" in Hiera, independent of your module code. 
 
 ### Remove Conditional Logic For Facts We Don't Control
 
 A second thing we can simplify is the conditional logic our ntp module has to include to deal with the many different names for packages, services, and configuration files assorted operating systems use:
 
-The ntp module is fairly concise: On four supported operating systems, it installs the ntp package, then configures and manages the ntp service. There are only 21 lines of code in the manifest that actually describe the needed configuration. But it includes [84 lines of conditional logic][ntp_module_conditional] to check for the operating system in use on a given node, then determine the name of the ntp package and service, *then* identify a template file to use for configuration. By removing that conditional logic, we'll be able to reduce the size of the ntp module's `init.pp` manifest by almost half.
+The ntp module has fairly modest goals: On four supported operating systems, it installs the ntp package, then configures and manages the ntp service. There are only 21 lines of code in the manifest that actually describe the needed configuration. But it includes [84 lines of conditional logic][ntp_module_conditional] to check for the operating system in use on a given node, identify the name of the ntp package and service, and identify a template file to use for configuration. By removing that conditional logic, we'll be able to reduce the size of the ntp module's `init.pp` manifest by almost half. 
 
-The downside of this kind of simplifcation is that it makes your Hiera data sources more complex and it makes your modules a little harder to share. It's no longer enough to cover the five user-facing parameters the module originally required: You also have to introduce data sources to cover your operating systems. This is a shortcoming of Hiera as it currently exists, and it's [an issue we're working on][hiera_module_data_ticket]. 
+The downside of this kind of simplifcation is that it makes your Hiera data sources more complex and it makes your modules a little harder to share. It's no longer enough to cover the five user-facing parameters the module originally required: You also have to introduce data sources to cover your operating systems, and you'll probably end up scattering module-related data throughout your hierarchy. This is a shortcoming of Hiera as it currently exists, and it's [an issue we're working on][hiera_module_data_ticket]. 
 
-We're going to show how to move some of this conditional logic into Hiera, but we recommend it only in cases where you don't plan to share your module with others. 
+We're still going to show how to move some of this conditional logic into Hiera, but we recommend it only in cases where you don't plan to share your module with others, and where you have a good plan for keeping up with the several places configuration data related to a given module may exist.
 
 ### Classify Nodes With Hiera
 
-We can also use Hiera to assign classes to nodes. This wasn't a feature of the ntp module we'll be using to begin with, but rather an added capability Hiera provides us, allowing us to use the [hiera_include][] function to add a single line to our `site.pp` manifest, which in turn will allow us to assign classes to nodes from within our Hiera data sources.
+We can also use Hiera to assign classes to nodes using the [hiera_include][] function, adding a single line to our `site.pp` manifest, then naming assigned nodes in our data sources.
 
 ## Describing Our Environment
 
 For purposes of this walkthrough, we'll assume a situation that looks something like this:
 
-- We have a number of different servers in use running four different operating systems, some of these are physical servers, some are virtual. **use hiera_include to assign ntp class** 
-- In the case of the virtualized servers, we manage their time via their host operating systems, so we don't want them to run an ntp service. **use virtualized fact to disable ntp on these machines**
-- Some of these servers should be able to act as ntp servers for other machines in the organization. **use "node" hierarchy to toggle restrict parameter**
-- All of these servers should first use organizational ntp services where possible, but be able to fall back to time servers managed by
-trusted outside organizations if organizational servers aren't available. **use hiera array to gather both org ntp servers and those provided by distros, etc.** 
+- We have two ntp servers in the organization that are allowed to talk to outside time servers. Other ntp servers get their time data from these two servers.
+- One of our primary ntp servers is very cautiously configured to keep it from breaking by automatically updating its ntp server package without hands-on testing, but the other is more permissively configured. 
+- We have a number of other ntp servers that will use our two primary servers. 
 
 ## Case 1. Putting Organization Data in Hiera
 
@@ -208,18 +206,10 @@ So, now we've configured the two nodes in our organization that we'll allow to u
 		  ]
 	}
 
-Unlike bugs and daffy, for which we had slightly different but node-specific configuration needs, we're comfortable letting any other node that uses the ntp class use this generic configuration data. Rather than creating a node-specific data source for every possible node on our network that might be running an ntp server, we'll store this data in `/etc/puppet/hiera/common.json`. With our very simple hierarchy, which so far only looks for the `fqdn` fact, any node that doesn't match the nodes we have data sources for will get the data found in `common.json`. Let's test it:
+Unlike kermit and grover, for which we had slightly different but node-specific configuration needs, we're comfortable letting any other node that uses the ntp class use this generic configuration data. Rather than creating a node-specific data source for every possible node on our network that might be running an ntp server, we'll store this data in `/etc/puppet/hiera/common.json`. With our very simple hierarchy, which so far only looks for the `fqdn` fact, any node that doesn't match the nodes we have data sources for will get the data found in `common.json`. Let's test it:
 
 	$ hiera ntp::servers fqdn=snuffie.acme.com
 	["kermit.acme.com iburst", "grover.acme.com iburst"]
-
-
-## Testing Our Hierarchy
-
-Simple command line test cases:
-
-- simple lookup
-- hiera array (to show compilation of all ntp servers)
 
 ## Adding a Class to a Node With Hiera
 
