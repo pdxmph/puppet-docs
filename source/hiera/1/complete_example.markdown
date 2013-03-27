@@ -17,8 +17,6 @@ description: "Learn how to use Hiera to replace a module's conditional code with
 [hiera_module_data_ticket]: http://projects.puppetlabs.com/issues/16856
 [automatic parameter lookup]: http://docs.puppetlabs.com/hiera/1/puppet.html#automatic-parameter-lookup
 
-The best way to show how Hiera can simplify your Puppet manifests and help you avoid repetitive code is to take some existing Puppet code and refactor it to work with Hiera.  
-
 In this example, we'll use the popular [Puppet Labs ntp module][ntp_module], an exemplar of the package/file/service pattern in common use among Puppet users, and one that will involve increasing amounts of conditional logic to expand the kinds of machines it can configure. By the time we're through, Hiera will have replaced that conditional logic and we'll have demonstrated further ways Hiera can simplify configuration and reduce the amount of code you have to write to configure your systems.
 
 Since we want to get you to a place where you can try everything out right away, we're providing a directory with all the configuration files and module code. You can [view the files here][examples] and download them all as a zip file, and we'll link to them as we progress through this walkthrough.
@@ -37,9 +35,9 @@ The ntp module takes five parameters:
 - enable
 - template
 
-Most of these parameters reflect decisions we have to make about each of the nodes to which we'd apply the ntp module's `ntp` class: Can it act as a time server for other hosts? (`restrict`), which servers should it consult? (`servers`), or  should we allow Puppet to automatically update the ntp package or not? (`autoupdate`). 
+Most of these parameters reflect decisions we have to make about each of the nodes to which we'd apply the ntp module's `ntp` class: Can it act as a time server for other hosts? (`restrict`), which servers should it consult? (`servers`), or  should we allow Puppet to automatically update the ntp package or not? (`autoupdate`). Without Hiera, these represent decisions we might make using conditional logic in our manifests, or that we'd find ourselves expressing and reexpressing over and over again, each time we applied a class to a node.
 
-Without Hiera, these all represent decisions we would make using conditional logic in our site and node manifests. With Hiera, we can move these decisions into a hierarchy built around the facts that drive these decisions: We can use the fully qualified domain name (`fqdn`) fact to identify the hosts we want to act as ntp servers for our organization, restricting how willing we are to let Puppet update their packages since they're key to our infrastructure. We can use whether or not they're virtual machines (the `is_virtual` fact) to enable or disable the ntp service if we happen to let guest operating systems get their time settings from their host systems.
+With Hiera, we can move these decisions into a hierarchy built around the facts that drive these decisions: We can use the fully qualified domain name (`fqdn`) fact to identify the hosts we want to act as ntp servers for our organization, restricting how willing we are to let Puppet update their packages since they're key to our infrastructure. We can use whether or not they're virtual machines (the `is_virtual` fact) to enable or disable the ntp service if we happen to let guest operating systems get their time settings from their host systems.
 
 Making these sorts of decisions --- decisions that are specific to an individual organization --- then expressing them in a hierarchy is the main strength of Hiera. You can use Hiera for these sorts of decisions right away, without having to rewrite a single line of your module. Also, using Hiera data sources to organize these decisions makes it easier to share a module with others: You can keep "organizational truth" in Hiera, independent of your module code. 
 
@@ -64,6 +62,7 @@ For purposes of this walkthrough, we'll assume a situation that looks something 
 - We have two ntp servers in the organization that are allowed to talk to outside time servers. Other ntp servers get their time data from these two servers.
 - One of our primary ntp servers is very cautiously configured to keep it from breaking by automatically updating its ntp server package without hands-on testing, but the other is more permissively configured. 
 - We have a number of other ntp servers that will use our two primary servers. 
+- We don't ever want virtual machines to run an ntp server. 
 
 ## Case 1. Putting Organization Data in Hiera
 
@@ -81,6 +80,7 @@ All Hiera configuration begins with `hiera.yaml`. You can read a [full discussio
 	:json:
 	  :datadir: /etc/puppet/hieradata
 	:hierarchy:
+      - virtual/%{::is_virtual}
 	  - node/%{::fqdn}
 	  - common
 
