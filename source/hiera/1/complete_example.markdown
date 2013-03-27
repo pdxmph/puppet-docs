@@ -15,6 +15,7 @@ description: "Learn how to use Hiera to replace a module's conditional code with
 [ntp_module_conditional]: https://github.com/puppetlabs/puppetlabs-ntp/blob/master/manifests/init.pp#L68-L147
 [hiera_include]: http://docs.puppetlabs.com/hiera/1/puppet.html#assigning-classes-to-nodes-with-hiera-hierainclude
 [hiera_module_data_ticket]: http://projects.puppetlabs.com/issues/16856
+[automatic parameter lookup]: http://docs.puppetlabs.com/hiera/1/puppet.html#automatic-parameter-lookup
 
 The best way to show how Hiera can simplify your Puppet manifests and help you avoid repetitive code is to take some existing Puppet code and refactor it to work with Hiera.  
 
@@ -74,7 +75,7 @@ In either case, we have to start with a `hiera.yaml` file and a hierarchy.
 
 ### Configuring Hiera and Setting Up the Hierarchy
 
-All Hiera configuration begins with `hiera.yaml`. You can read a [full discussion of this file][hiera.yaml], including where you should put it depending on the version of Puppet you're using.  Here's the one we'll be using for this exercise:
+All Hiera configuration begins with `hiera.yaml`. You can read a [full discussion of this file][hiera.yaml], including where you should put it depending on the version of Puppet you're using.  Here's the one we'll be using for this walkthrough:
 
 	---
 	:backends:
@@ -83,7 +84,6 @@ All Hiera configuration begins with `hiera.yaml`. You can read a [full discussio
 	  :datadir: /etc/puppet/hieradata
 	:hierarchy:
 	  - node/%{::fqdn}
-	  - osfamily/%{::osfamily}
 	  - common
 
 Step-by-step:
@@ -94,11 +94,144 @@ Step-by-step:
 
 `:hierarchy:` configures the data sources Hiera should consult. Puppet users commonly separate their hierarchies into directories to make it easier to get a quick top-level sense of how the hierarchy is put together. In this case, we're keeping it simple: 
 
-Files in the `/node` directory should be named for the fully qualified domain name (`fqdn`) fact for any systems we want to specifically configure with Hiera, and should end with `.json.` Given the nodes `master.acme.com`, `bugs.acme.com`, and `daffy.acme.com`, we'd want to include the following files:
+We're going to name files in the `/node` directory for the fully qualified domain name (`fqdn`) fact for any nodes we want to specifically configure with Hiera.
 
-- `master.acme.com.json`
-- `bugs.acme.com.json`
-- `daffy.acme.com.json`
+Given the nodes  `kermit.acme.com`, and `grover.acme.com`, we'd want to include the following files:
+
+- `kermit.acme.com.json`
+- `grover.acme.com.json`
+
+Next, the `common.json` file is a data source that provides any common or default values we want to use when Hiera can't find a match for a given key elsewhere in our hierarchy. In this case, we're going to use it to set common ntp servers and default configuration options for the ntp module. 
+
+### Configuring for the Command Line
+
+The [Hiera command line tool][] is useful when you're in the process of designing and testing your hierarchy. You can use it to mock in facts for Hiera to look up without having to go through cumbersome trial-and-error puppet runs. Since the `hiera` command expects to find `hiera.yaml` at `/etc/hiera.yaml`, you should set a symbolic link from your `hiera.yaml` file to `/etc/hiera.yaml`.
+
+## Writing the Data Sources
+
+Now that we've got Hiera configured, we're ready to return to the ntp module and take a look at the parameters the `ntp` class it provides requires. 
+
+> **Learning About Hiera Data Sources:** This example won't cover all the data types you might want to use, and we're only using one of two built-in data backends (JSON). For a more complete look at data sources, please see our guide to [writing Hiera data sources][hiera_datasources], which includes more complete examples written in JSON and YAML. 
+
+### Identifying Parameters
+
+We need to start by figuring out the parameters required by the `ntp` class our module provides. So let's start by looking at the [ntp module's `init.pp` manifest][ntp_init.pp], where we see five:
+
+servers
+: An array of time servers; `UNSET` by default. Conditional logic in `init.pp` provides a list of ntp servers maintained by the respective maintainers of our module's supported operating systems.
+
+restrict
+: Whether to restrict ntp daemons from allowing others to use as a server; `true` by default
+
+autoupdate
+: Whether to update the ntp package automatically or not; `false` by default
+
+enable
+: Automatically start ntp deamon on boot; `true` by default
+
+template
+: The name of the template to use to configure the ntp service. This is `undef` by default, and it's configured within the `init.pp` manifest. 
+
+### Making Decisions and Expressing Them in Hiera
+
+Now that we know the parameters the `ntp` class expects, we can start making decisions about the nodes on our system, then expressing those decisions as Hiera data. Let's start with bugs and daffy: The two nodes in our organization that we allow to talk to the outside world for purposes of timekeeping.
+
+#### `kermit.acme.com.json`
+
+We want one of these two nodes, `kermit.acme.com`, to act as the primary organizational time server. We want it to consult outside time servers, we won't want it to update its ntp server package by default, and we definitely want it to launch the ntp service at boot. So let's write that out in JSON, making sure to express our variables as part of the `ntp` namespace to insure Hiera will pick them up as part of its [automatic parameter lookup][].
+
+	{  
+	   "ntp::restrict" : false,
+	   "ntp::autoupdate" : false,
+	   "ntp::enable" : true,
+	   "ntp::servers" : [
+		   "0.us.pool.ntp.org iburst",
+		   "1.us.pool.ntp.org iburst",
+		   "2.us.pool.ntp.org iburst",
+		   "3.us.pool.ntp.org iburst"
+		   ]
+	}
+
+Since we want to provide this data for a specific node, and since we're using the `fqdn` fact to identify unique nodes in our hierarchy, we need to save this code in the `/etc/puppet/hiera/node` directory as `kermit.acme.json.com`. 
+
+Once you've saved that, let's do a quick test using the [Hiera command line tool][]:
+
+	$ hiera ntp::servers fqdn=kermit.acme.com
+
+You should see this:
+
+	["0.us.pool.ntp.org iburst", "1.us.pool.ntp.org iburst", "2.us.pool.ntp.org iburst", "3.us.pool.ntp.org iburst"]
+
+That's just the array of outside ntp servers and options we expressed as a JSON array coming back as a puppet array our module will use when it generates configuration files from its templates.
+
+
+> **Something Went Wrong?** If, instead, you get `nil`, `false`, or something else completely, you should step back through your Hiera configuration making sure:
+> - Your `hiera.yaml` file matches the example we provided
+> - You've put a symlink to `hiera.yaml` where the command line tool expects to find it (`/etc/hiera.yaml`)
+> - You've saved your `kermit.acme.com` data source file with a `.json` extension
+> - Your data source file's JSON is well formed. Missing or extraneous commas will cause the JSON parser to fail 
+
+Provided everything works and you get back that array of ntp servers, you're ready to configure another node. 
+
+### `grover.acme.com.json`
+
+Our next ntp node, `grover.acme.com`, is a little less critical to our infrastructure than `bugs`, so we can be a little more permissive with its configuration: It's o.k. if grover's ntp packages are automatically updated. We also want grover to use kermit as its ntp server of choice. Let's express that as JSON:
+
+	{  
+	   "ntp::restrict" : false,
+	   "ntp::autoupdate" : true,
+	   "ntp::enable" : true,
+	   "ntp::servers" : [
+		   "kermit.acme.com iburst",
+		   "0.us.pool.ntp.org iburst",
+		   "1.us.pool.ntp.org iburst",
+		   "2.us.pool.ntp.org iburst",
+		   ]
+	}
+
+As with `kermit.acme.com`, we want to save grover's Hiera data source in the `/etc/puppet/hiera/nodes` directory using the `fqdn` fact for the file name: `grover.acme.com.json`. We can once again test it with the hiera command line tool:
+
+	$ hiera ntp::servers fqdn=grover.acme.com
+	["kermit.acme.com iburst", "0.us.pool.ntp.org iburst", "1.us.pool.ntp.org iburst", "2.us.pool.ntp.org iburst"]
+
+### `common.json`
+
+So, now we've configured the two nodes in our organization that we'll allow to update from outside ntp servers. However, we still have a few nodes to account for that also provide ntp services. They depend on bugs and daffy to get the correct time, and we don't mind if they update themselves. Let's write that out in JSON:
+
+	{  
+	   "ntp::restrict" : false,
+	   "ntp::autoupdate" : true,
+	   "ntp::enable" : true,
+	   "ntp::servers" : [
+		   "kermit.acme.com iburst",
+		   "grover.acme.com iburst"
+		  ]
+	}
+
+Unlike bugs and daffy, for which we had slightly different but node-specific configuration needs, we're comfortable letting any other node that uses the ntp class use this generic configuration data. Rather than creating a node-specific data source for every possible node on our network that might be running an ntp server, we'll store this data in `/etc/puppet/hiera/common.json`. With our very simple hierarchy, which so far only looks for the `fqdn` fact, any node that doesn't match the nodes we have data sources for will get the data found in `common.json`. Let's test it:
+
+	$ hiera ntp::servers fqdn=snuffie.acme.com
+	["kermit.acme.com iburst", "grover.acme.com iburst"]
+
+
+## Testing Our Hierarchy
+
+Simple command line test cases:
+
+- simple lookup
+- hiera array (to show compilation of all ntp servers)
+
+## Adding a Class to a Node With Hiera
+
+- hiera include
+
+## 
+
+
+## Case 2. Universal Truth
+
+
+Modify the hierarchy to include osfamily:
 
 Files in the `/osfamily` directory should be named for the `osfamily` fact. In this case, we're supporting the Debian, FreeBSD, Red Hat, SUSE, and Arch Linux operating system families. We're going to use the `osfamily` fact to determine the name of the ntp package, the location of its configuration files, the template to use for its configuration files, and the names of appropriate outside ntp servers to use. So we'll need to include the following files in our `osfamily` directory:
 
@@ -110,32 +243,11 @@ Files in the `/osfamily` directory should be named for the `osfamily` fact. In t
 
 Note that these files are all case sensitive and must match the output of the facter command.
 
-Finally, the `common.json` file is a data source that provides any common or default values we want to use when Hiera can't find a match for a given key elsewhere in our hierarchy. In this case, we're going to use it to set common ntp servers and default configuration options for the ntp module. 
+add to hierarchy: 
 
-### Configuring for the Command Line
+- osfamily/%{::osfamily}
 
-The [Hiera command line tool][] is useful when you're in the process of designing and testing your hierarchy. You can use it to mock in facts for Hiera to look up without having to go through cumbersome trial-and-error puppet runs. Since the `hiera` command expects to find `hiera.yaml` at `/etc/hiera.yaml`, you should set a symbolic link from your `hiera.yaml` file to `/etc/hiera.yaml`.
 
-## Writing the Data Sources
-
-Now that we've got Hiera configured, we're ready to return to the ntp module and start figuring out how we can take its conditional logic and convert that into a Hiera hierarchy of data source files. As we mentioned at the top, you can [download all the files][examples] we reference here and start using them on a test system right away. 
-
-> **Learning About Hiera Data Sources:** This example won't cover all the data types you might want to use, and we're only using one of two built-in data backends (JSON). For a more complete look at data sources, please see our guide to [writing Hiera data sources][hiera_datasources], which includes more complete examples written in JSON and YAML. 
-
-### Identifying Parameters
-
-We need to start by figuring out the parameters required by the `ntp` class our module provides. So let's start by looking at the [ntp module's README][], where we see five:
-
-- servers
-- restrict
-- autoupdate
-- enable
-- template
-
-**call out osfamily-related logic in ntp's init.pp**
-
-- enumerate the parameters we need to cover
-- explain how we're going to break them out across nodes and osfamilies
 
 	
 ### `osfamily/%{::osfamily}.json`
@@ -162,25 +274,7 @@ We need to start by figuring out the parameters required by the `ntp` class our 
 	}
 
 
-### `daffy.acme.com.json`
-
-
-### `common.json`
 
 
 
 > **JSON or YAML?** Out of the box, Hiera supports both YAML and JSON files as data sources. Both work fine, so choosing one is a question of personal preference. We went with JSON, but that doesn't constitute a recommendation. We do recommend you stick to one or the other for simplicity's sake.
-
-## Testing Our Hierarchy
-
-Simple command line test cases:
-
-- simple lookup
-- hiera array (to show compilation of all ntp servers)
-
-## Adding a Class to a Node With Hiera
-
-- hiera include
-
-## 
-
