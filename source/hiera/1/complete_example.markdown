@@ -17,7 +17,7 @@ description: "Learn how to use Hiera to replace a module's conditional code with
 [hiera_module_data_ticket]: http://projects.puppetlabs.com/issues/16856
 [automatic parameter lookup]: http://docs.puppetlabs.com/hiera/1/puppet.html#automatic-parameter-lookup
 
-In this example, we'll use the popular [Puppet Labs ntp module][ntp_module], an exemplar of the package/file/service pattern in common use among Puppet users, and one that will involve increasing amounts of conditional logic to expand the kinds of machines it can configure. By the time we're through, Hiera will have replaced that conditional logic and we'll have demonstrated further ways Hiera can simplify configuration and reduce the amount of code you have to write to configure your systems.
+In this example, we'll use the popular [Puppet Labs ntp module][ntp_module], an exemplar of the package/file/service pattern in common use among Puppet users, and one that will involve increasing amounts of conditional logic to expand the kinds of machines it can configure. By the time we're through, Hiera will have replaced that conditional logic and we'll have demonstrated further ways Hiera can simplify configuration and reduce the amount of code you have to write.
 
 Since we want to get you to a place where you can try everything out right away, we're providing a directory with all the configuration files and module code. You can [view the files here][examples] and download them all as a zip file, and we'll link to them as we progress through this walkthrough.
 
@@ -37,17 +37,23 @@ The ntp module takes five parameters:
 
 Most of these parameters reflect decisions we have to make about each of the nodes to which we'd apply the ntp module's `ntp` class: Can it act as a time server for other hosts? (`restrict`), which servers should it consult? (`servers`), or  should we allow Puppet to automatically update the ntp package or not? (`autoupdate`). Without Hiera, these represent decisions we might make using conditional logic in our manifests, or that we'd find ourselves expressing and reexpressing over and over again, each time we applied a class to a node.
 
-With Hiera, we can move these decisions into a hierarchy built around the facts that drive these decisions: We can use the fully qualified domain name (`fqdn`) fact to identify the hosts we want to act as ntp servers for our organization, restricting how willing we are to let Puppet update their packages since they're key to our infrastructure. We can use whether or not they're virtual machines (the `is_virtual` fact) to enable or disable the ntp service if we happen to let guest operating systems get their time settings from their host systems.
+With Hiera, we can move these decisions into a hierarchy built around the facts that drive these decisions: We can use the fully qualified domain name (`fqdn`) fact to identify the hosts we want to act as ntp servers for our organization, restricting how willing we are to let Puppet update their packages since they're key to our infrastructure.
 
 Making these sorts of decisions --- decisions that are specific to an individual organization --- then expressing them in a hierarchy is the main strength of Hiera. You can use Hiera for these sorts of decisions right away, without having to rewrite a single line of your module. Also, using Hiera data sources to organize these decisions makes it easier to share a module with others: You can keep "organizational truth" in Hiera, independent of your module code. 
 
 ### Remove Conditional Logic For Facts We Don't Control
 
-A second thing we can simplify is the conditional logic our ntp module has to include to deal with the many different names for packages, services, and configuration files assorted operating systems use:
+A second thing we can simplify is the conditional logic our ntp module has to include to deal with the many different names for packages, services, and configuration files assorted operating systems use.
 
-The ntp module has fairly modest goals: On four supported operating systems, it installs the ntp package, then configures and manages the ntp service. There are only 21 lines of code in the manifest that actually describe the needed configuration. But it includes [84 lines of conditional logic][ntp_module_conditional] to check for the operating system in use on a given node, identify the name of the ntp package and service, and identify a template file to use for configuration. By removing that conditional logic, we'll be able to reduce the size of the ntp module's `init.pp` manifest by almost half. 
+The ntp module has fairly modest goals: On four supported operating systems, it installs an ntp package, then configures and manages the ntp service. There are only 21 lines of code in the manifest that actually describe the needed configuration. But it includes [84 lines of conditional logic][ntp_module_conditional] to check for the operating system in use on a given node, identify the name of the ntp package and service, and identify a template file to use for configuration. By removing that conditional logic, we'll be able to reduce the size of the ntp module's `init.pp` manifest by almost half and we'll make it easier to add new operating systems to our network over time: Instead of rewriting conditional logic in the template, we can create a new Hiera data source. 
 
-The downside of this kind of simplifcation is that it makes your Hiera data sources more complex and it makes your modules a little harder to share. It's no longer enough to cover the five user-facing parameters the module originally required: You also have to introduce data sources to cover your operating systems, and you'll probably end up scattering module-related data throughout your hierarchy. This is a shortcoming of Hiera as it currently exists, and it's [an issue we're working on][hiera_module_data_ticket]. 
+The downside of this kind of simplifcation is that it makes your Hiera data sources more complex and it makes your modules a little harder to share. Before we replace some of the conditional logic we find in the ntp module, we should keep in mind that:
+
+- It will no longer be enough to use Hiera to cover the five user-facing parameters the module originally required: We'll also have to introduce data sources to cover the supported operating systems, and we'll probably end up scattering module-related data throughout several orthogonal elements of our hierarchy. In some ways, the module will have to become more complex.
+
+- If you stick to writing modules that don't _expect_ Hiera, your code will be much more easily shared and reusable: People who are using Hiera already will know exactly how to configure it to work with your module; people who aren't using Hiera won't have to lean just to use your code.
+
+These are issues with Hiera as it currently exists, and [we're working on them][hiera_module_data_ticket]. 
 
 We're still going to show how to move some of this conditional logic into Hiera, but we recommend it only in cases where you don't plan to share your module with others, and where you have a good plan for keeping up with the several places configuration data related to a given module may exist.
 
@@ -60,9 +66,9 @@ We can also use Hiera to assign classes to nodes using the [hiera_include][] fun
 For purposes of this walkthrough, we'll assume a situation that looks something like this:
 
 - We have two ntp servers in the organization that are allowed to talk to outside time servers. Other ntp servers get their time data from these two servers.
-- One of our primary ntp servers is very cautiously configured to keep it from breaking by automatically updating its ntp server package without hands-on testing, but the other is more permissively configured. 
+- One of our primary ntp servers is very cautiously configured to keep it from breaking by automatically updating its ntp server package without testing, but the other is more permissively configured. 
 - We have a number of other ntp servers that will use our two primary servers. 
-- We don't ever want virtual machines to run an ntp server. 
+
 
 ## Case 1. Putting Organization Data in Hiera
 
@@ -80,7 +86,6 @@ All Hiera configuration begins with `hiera.yaml`. You can read a [full discussio
 	:json:
 	  :datadir: /etc/puppet/hieradata
 	:hierarchy:
-      - virtual/%{::is_virtual}
 	  - node/%{::fqdn}
 	  - common
 
@@ -93,11 +98,6 @@ Step-by-step:
 `:hierarchy:` configures the data sources Hiera should consult. Puppet users commonly separate their hierarchies into directories to make it easier to get a quick top-level sense of how the hierarchy is put together. In this case, we're keeping it simple: 
 
 We're going to name files in the `/node` directory for the fully qualified domain name (`fqdn`) fact for any nodes we want to specifically configure with Hiera.
-
-Given the nodes  `kermit.acme.com`, and `grover.acme.com`, we'd want to include the following files:
-
-- `kermit.acme.com.json`
-- `grover.acme.com.json`
 
 Next, the `common.json` file is a data source that provides any common or default values we want to use when Hiera can't find a match for a given key elsewhere in our hierarchy. In this case, we're going to use it to set common ntp servers and default configuration options for the ntp module. 
 
@@ -125,14 +125,14 @@ autoupdate
 : Whether to update the ntp package automatically or not; `false` by default
 
 enable
-: Automatically start ntp deamon on boot; `true` by default
+: Whether to start the ntp daemon on boot; `true` by default
 
 template
-: The name of the template to use to configure the ntp service. This is `undef` by default, and it's configured within the `init.pp` manifest. 
+: The name of the template to use to configure the ntp service. This is `undef` by default, and it's configured within the `init.pp` manifest with some conditional logic.
 
 ### Making Decisions and Expressing Them in Hiera
 
-Now that we know the parameters the `ntp` class expects, we can start making decisions about the nodes on our system, then expressing those decisions as Hiera data. Let's start with bugs and daffy: The two nodes in our organization that we allow to talk to the outside world for purposes of timekeeping.
+Now that we know the parameters the `ntp` class expects, we can start making decisions about the nodes on our system, then expressing those decisions as Hiera data. Let's start with kermit and grover: The two nodes in our organization that we allow to talk to the outside world for purposes of timekeeping.
 
 #### `kermit.acme.com.json`
 
@@ -162,18 +162,18 @@ You should see this:
 
 That's just the array of outside ntp servers and options we expressed as a JSON array coming back as a puppet array our module will use when it generates configuration files from its templates.
 
-
 > **Something Went Wrong?** If, instead, you get `nil`, `false`, or something else completely, you should step back through your Hiera configuration making sure:
+
 > - Your `hiera.yaml` file matches the example we provided
-> - You've put a symlink to `hiera.yaml` where the command line tool expects to find it (`/etc/hiera.yaml`)
-> - You've saved your `kermit.acme.com` data source file with a `.json` extension
-> - Your data source file's JSON is well formed. Missing or extraneous commas will cause the JSON parser to fail 
+ - You've put a symlink to `hiera.yaml` where the command line tool expects to find it (`/etc/hiera.yaml`)
+ - You've saved your `kermit.acme.com` data source file with a `.json` extension
+ - Your data source file's JSON is well formed. Missing or extraneous commas will cause the JSON parser to fail 
 
 Provided everything works and you get back that array of ntp servers, you're ready to configure another node. 
 
 ### `grover.acme.com.json`
 
-Our next ntp node, `grover.acme.com`, is a little less critical to our infrastructure than `bugs`, so we can be a little more permissive with its configuration: It's o.k. if grover's ntp packages are automatically updated. We also want grover to use kermit as its ntp server of choice. Let's express that as JSON:
+Our next ntp node, `grover.acme.com`, is a little less critical to our infrastructure than kermit, so we can be a little more permissive with its configuration: It's o.k. if grover's ntp packages are automatically updated. We also want grover to use kermit as its primary ntp server. Let's express that as JSON:
 
 	{  
 	   "ntp::restrict" : false,
@@ -194,19 +194,19 @@ As with `kermit.acme.com`, we want to save grover's Hiera data source in the `/e
 
 ### `common.json`
 
-So, now we've configured the two nodes in our organization that we'll allow to update from outside ntp servers. However, we still have a few nodes to account for that also provide ntp services. They depend on bugs and daffy to get the correct time, and we don't mind if they update themselves. Let's write that out in JSON:
+So, now we've configured the two nodes in our organization that we'll allow to update from outside ntp servers. However, we still have a few nodes to account for that also provide ntp services. They depend on kermit and grover to get the correct time, and we don't mind if they update themselves. Let's write that out in JSON:
 
 	{  
 	   "ntp::restrict" : false,
 	   "ntp::autoupdate" : true,
 	   "ntp::enable" : true,
 	   "ntp::servers" : [
-		   "kermit.acme.com iburst",
-		   "grover.acme.com iburst"
+		   "grover.acme.com iburst",
+		   "kermit.acme.com iburst"
 		  ]
 	}
 
-Unlike kermit and grover, for which we had slightly different but node-specific configuration needs, we're comfortable letting any other node that uses the ntp class use this generic configuration data. Rather than creating a node-specific data source for every possible node on our network that might be running an ntp server, we'll store this data in `/etc/puppet/hiera/common.json`. With our very simple hierarchy, which so far only looks for the `fqdn` fact, any node that doesn't match the nodes we have data sources for will get the data found in `common.json`. Let's test it:
+Unlike kermit and grover, for which we had slightly different but node-specific configuration needs, we're comfortable letting any other node that uses the ntp class use this generic configuration data. Rather than creating a node-specific data source for every possible node on our network that might need to use the ntp module, we'll store this data in `/etc/puppet/hiera/common.json`. With our very simple hierarchy, which so far only looks for the `fqdn` and `is_virtual` facts, any node that doesn't match the nodes we have data sources for will get the data found in `common.json`. Let's test it:
 
 	$ hiera ntp::servers fqdn=snuffie.acme.com
 	["kermit.acme.com iburst", "grover.acme.com iburst"]
@@ -217,7 +217,6 @@ Unlike kermit and grover, for which we had slightly different but node-specific 
 - need to assign the ntp class to kermit, grover and snuffy explicitly so we can then show the change that allows us to move that assignment into hiera data sources
 - hiera include 
 
-## 
 
 
 ## Case 2. Universal Truth
