@@ -17,9 +17,9 @@ description: "Learn how to use Hiera to replace a module's conditional code with
 [hiera_module_data_ticket]: http://projects.puppetlabs.com/issues/16856
 [automatic parameter lookup]: http://docs.puppetlabs.com/hiera/1/puppet.html#automatic-parameter-lookup
 
-In this example, we'll use the popular [Puppet Labs ntp module][ntp_module], an exemplar of the package/file/service pattern in common use among Puppet users, and one that will involve increasing amounts of conditional logic to expand the kinds of machines it can configure. By the time we're through, Hiera will have replaced that conditional logic and we'll have demonstrated further ways Hiera can simplify configuration and reduce the amount of code you have to write.
+In this example, we'll use the popular [Puppet Labs ntp module][ntp_module], an exemplar of the package/file/service pattern in common use among Puppet users, and one that could involve increasing amounts of conditional logic to expand the kinds of machines it can configure. 
 
-Since we want to get you to a place where you can try everything out right away, we're providing a directory with all the configuration files and module code. You can [view the files here][examples] and download them all as a zip file, and we'll link to them as we progress through this walkthrough.
+We'll start simply, using Hiera to provide the ntp module with parameter data based on particular nodes in our organization. Then we'll use Hiera to assign the `ntp` class provided by the module to specific nodes. Finally, we'll show how Hiera could be used to perform a much more ambitious refactoring of the ntp module to replace a large chunk of conditional logic.
 
 ##  What Can We Simplify?
 
@@ -35,31 +35,34 @@ The ntp module takes five parameters:
 - enable
 - template
 
-Most of these parameters reflect decisions we have to make about each of the nodes to which we'd apply the ntp module's `ntp` class: Can it act as a time server for other hosts? (`restrict`), which servers should it consult? (`servers`), or  should we allow Puppet to automatically update the ntp package or not? (`autoupdate`). Without Hiera, these represent decisions we might make using conditional logic in our manifests, or that we'd find ourselves expressing and reexpressing over and over again, each time we applied a class to a node.
+Most of these parameters reflect decisions we have to make about each of the nodes to which we'd apply the ntp module's `ntp` class: Can it act as a time server for other hosts? (`restrict`), which servers should it consult? (`servers`), or  should we allow Puppet to automatically update the ntp package or not? (`autoupdate`). 
 
-With Hiera, we can move these decisions into a hierarchy built around the facts that drive these decisions: We can use the fully qualified domain name (`fqdn`) fact to identify the hosts we want to act as ntp servers for our organization, restricting how willing we are to let Puppet update their packages since they're key to our infrastructure.
+Without Hiera, we might find ourselves adding organizational data to our module code as default parameter values, reducing how shareable it is. We might find ourselves repeating configuration data in our site manifests to cover minor differences in configuration between nodes. 
 
-Making these sorts of decisions --- decisions that are specific to an individual organization --- then expressing them in a hierarchy is the main strength of Hiera. You can use Hiera for these sorts of decisions right away, without having to rewrite a single line of your module. Also, using Hiera data sources to organize these decisions makes it easier to share a module with others: You can keep "organizational truth" in Hiera, independent of your module code. 
+With Hiera, we can move these decisions into a hierarchy built around the facts that drive these decisions: We can use the fully qualified domain name (`fqdn`) fact to identify the hosts we want to act as ntp servers for our organization, restricting how willing we are to let Puppet update their packages. 
+
+Making these sorts of decisions --- decisions that are specific to an individual organization --- then expressing them in a hierarchy is the main strength of Hiera. You can use Hiera for these sorts of decisions right away, without having to rewrite a single line of your module. Also, using Hiera data sources to organize these decisions makes it easier to share a module with others: You can keep "organizational truth" in Hiera, independent of your module code.
+
+### Classify Nodes With Hiera
+
+We can also use Hiera to assign classes to nodes using the [hiera_include][] function, adding a single line to our `site.pp` manifest, then naming assigned nodes in our data sources.
 
 ### Remove Conditional Logic For Facts We Don't Control
 
-A second thing we can simplify is the conditional logic our ntp module has to include to deal with the many different names for packages, services, and configuration files assorted operating systems use.
+A third thing we can simplify is the conditional logic our ntp module has to include to deal with the many different names for packages, services, and configuration files assorted operating systems use. This is a problematic use case for Hiera, but you may find it useful in your own organization.
 
 The ntp module has fairly modest goals: On four supported operating systems, it installs an ntp package, then configures and manages the ntp service. There are only 21 lines of code in the manifest that actually describe the needed configuration. But it includes [84 lines of conditional logic][ntp_module_conditional] to check for the operating system in use on a given node, identify the name of the ntp package and service, and identify a template file to use for configuration. By removing that conditional logic, we'll be able to reduce the size of the ntp module's `init.pp` manifest by almost half and we'll make it easier to add new operating systems to our network over time: Instead of rewriting conditional logic in the template, we can create a new Hiera data source. 
 
 The downside of this kind of simplifcation is that it makes your Hiera data sources more complex and it makes your modules a little harder to share. Before we replace some of the conditional logic we find in the ntp module, we should keep in mind that:
 
-- It will no longer be enough to use Hiera to cover the five user-facing parameters the module originally required: We'll also have to introduce data sources to cover the supported operating systems, and we'll probably end up scattering module-related data throughout several orthogonal elements of our hierarchy. In some ways, the module will have to become more complex.
+- It will no longer be enough to use Hiera to cover the five user-facing parameters the module originally required: We'll also have to introduce data sources to cover the supported operating systems, and we'll probably end up scattering module-related data throughout several orthogonal elements of our hierarchy. We'll also need to turn a number of variables internal to the module --- variables the authors never intended to be user-facing --- into additional parameters for the `ntp` class the module provides. In some ways, the module will have to become more complex.
 
-- If you stick to writing modules that don't _expect_ Hiera, your code will be much more easily shared and reusable: People who are using Hiera already will know exactly how to configure it to work with your module; people who aren't using Hiera won't have to lean just to use your code.
+- If you stick to writing modules that don't _expect_ Hiera, your code will be much more easily shared and reusable: People who are using Hiera already will know exactly how to configure it to work with your module; people who aren't using Hiera won't have to learn just to use your code.
 
 These are issues with Hiera as it currently exists, and [we're working on them][hiera_module_data_ticket]. 
 
 We're still going to show how to move some of this conditional logic into Hiera, but we recommend it only in cases where you don't plan to share your module with others, and where you have a good plan for keeping up with the several places configuration data related to a given module may exist.
 
-### Classify Nodes With Hiera
-
-We can also use Hiera to assign classes to nodes using the [hiera_include][] function, adding a single line to our `site.pp` manifest, then naming assigned nodes in our data sources.
 
 ## Describing Our Environment
 
@@ -211,13 +214,13 @@ Unlike kermit and grover, for which we had slightly different but node-specific 
 	$ hiera ntp::servers fqdn=snuffie.acme.com
 	["kermit.acme.com iburst", "grover.acme.com iburst"]
 
+
 ## Adding a Class to a Node With Hiera
 
 
-- need to assign the ntp class to kermit, grover and snuffy explicitly so we can then show the change that allows us to move that assignment into hiera data sources
+- need to assign the ntp class to kermit, grover and snuffy explicitly so we can then show the change that allows us to move that 
+- assignment into hiera data sources
 - hiera include 
-
-
 
 ## Case 2. Universal Truth
 
