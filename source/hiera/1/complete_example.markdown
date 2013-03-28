@@ -35,6 +35,7 @@ The ntp module takes five parameters:
 - enable
 - template
 
+<!-- pare these things down -->
 Most of these parameters reflect decisions we have to make about each of the nodes to which we'd apply the ntp module's `ntp` class: Can it act as a time server for other hosts? (`restrict`), which servers should it consult? (`servers`), or  should we allow Puppet to automatically update the ntp package or not? (`autoupdate`). 
 
 Without Hiera, we might find ourselves adding organizational data to our module code as default parameter values, reducing how shareable it is. We might find ourselves repeating configuration data in our site manifests to cover minor differences in configuration between nodes. 
@@ -107,6 +108,7 @@ Next, the `common.json` file is a data source that provides any common or defaul
 ### Configuring for the Command Line
 
 The [Hiera command line tool][] is useful when you're in the process of designing and testing your hierarchy. You can use it to mock in facts for Hiera to look up without having to go through cumbersome trial-and-error puppet runs. Since the `hiera` command expects to find `hiera.yaml` at `/etc/hiera.yaml`, you should set a symbolic link from your `hiera.yaml` file to `/etc/hiera.yaml`.
+<!-- show the symlink command -->
 
 ## Writing the Data Sources
 
@@ -197,10 +199,11 @@ As with `kermit.acme.com`, we want to save grover's Hiera data source in the `/e
 
 ### `common.json`
 
+
 So, now we've configured the two nodes in our organization that we'll allow to update from outside ntp servers. However, we still have a few nodes to account for that also provide ntp services. They depend on kermit and grover to get the correct time, and we don't mind if they update themselves. Let's write that out in JSON:
 
 	{  
-	   "ntp::restrict" : false,
+	   "ntp::restrict" : true,
 	   "ntp::autoupdate" : true,
 	   "ntp::enable" : true,
 	   "ntp::servers" : [
