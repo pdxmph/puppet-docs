@@ -393,67 +393,6 @@ Once you've got all that configured, go ahead and test with the Hiera command li
 	$ hiera classes virtual=vmware
 	vmwaretools
 
-
-
-## Case 2. Universal Truth
-
-Modify the hierarchy to include osfamily:
-
-Files in the `/osfamily` directory should be named for the `osfamily` fact. In this case, we're supporting the Debian, FreeBSD, Red Hat, SUSE, and Arch Linux operating system families. We're going to use the `osfamily` fact to determine the name of the ntp package, the location of its configuration files, the template to use for its configuration files, and the names of appropriate outside ntp servers to use. So we'll need to include the following files in our `osfamily` directory:
-
-- `Archlinux.json`
-- `Debian.json`
-- `FreeBSD.json`
-- `RedHat.json`
-- `Suse.json`
-
-Note that these files are all case sensitive and must match the output of the facter command.
-
-add to hierarchy: 
-
-- osfamily/%{::osfamily}
-
-
-
-### `osfamily/%{::osfamily}.json`
-
-**Remove the stuff that's organizational, keep the stuff that's pertinent to the distro**
-
-	{  
-	   "ntp::pkg_name" : "ntp",
-	   "ntp::svc_name" : "ntp",
-	   "ntp::config"   : "/etc/ntp.conf",
-	   "ntp::config_tpl" : "ntp.conf.debian.erb",
-	   "ntp::supported" : true,
-	   "ntp::restrict" : true,
-	   "ntp::autoupdate" : true,
-	   "ntp::enable" : true,
-	   "ntp::ensure" : "running",
-	   "ntp::package_ensure" : "latest",
-	   "ntp::servers" : [
-		   "0.debian.pool.ntp.org iburst",
-		   "1.debian.pool.ntp.org iburst",
-		   "2.debian.pool.ntp.org iburst",
-		   "3.debian.pool.ntp.org iburst"
-		   ]
-	}
-
-
-
-
-
-## Scraps 
-
-> **JSON or YAML?** Out of the box, Hiera supports both YAML and JSON files as data sources. Both work fine, so choosing one is a question of personal preference. We went with JSON, but that doesn't constitute a recommendation. We do recommend you stick to one or the other for simplicity's sake.
-
-
-Junior people: make a new node by duping the file
-
-
-### Remove Conditional Logic For Facts We Don't Control
-
-A third thing we can simplify is the conditional logic our ntp module has to include to deal with the many different names for packages, services, and configuration files assorted operating systems use. This is a problematic use case for Hiera, but you may find it useful in your own organization.
-
 If everything worked, great. If not, [consult the checklist we provided earlier](#something-went-wrong) and give it another shot.
 
 ## Exploring Hiera Further
