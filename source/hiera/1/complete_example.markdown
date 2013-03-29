@@ -4,6 +4,7 @@ title: "Hiera 1: Complete Example"
 description: "Learn how to use Hiera to replace a module's conditional code with this walkthrough."
 ---
 
+[puppet-vmwaretools]: https://github.com/craigwatson/puppet-vmwaretools
 [external node classifier (ENC)]: http://docs.puppetlabs.com/guides/external_nodes.html
 [ntp module's README]: https://github.com/puppetlabs/puppetlabs-ntp/blob/master/README.markdown
 [ntp_module]: http://forge.puppetlabs.com/puppetlabs/ntp
@@ -93,7 +94,7 @@ All Hiera configuration begins with `hiera.yaml`. You can read a [full discussio
 	:backends:
 	  - json
 	:json:
-	  :datadir: /etc/puppet/hieradata
+	  :datadir: /etc/puppet/hiera
 	:hierarchy:
 	  - node/%{::fqdn}
 	  - common
@@ -256,7 +257,7 @@ If you're interested in taking things a step further, using the decision-making 
 
 ## Assigning a Class to a Node With Hiera
 
-In the first part of our example, we were concerned with how to use Hiera to provide data to a parameterized class, but we were assigning the classes to nodes in the traditional Puppet way: By making `class` declarations for each node in our `site.pp` manifest. Thanks to the `hiera_include` function, you can assign nodes to a class the same way you can assign values to class parameters: Picking a facter fact on which you want to base a decision and adding data sources to your `hiera.yaml` file. 
+In the first part of our example, we were concerned with how to use Hiera to provide data to a parameterized class, but we were assigning the classes to nodes in the traditional Puppet way: By making `class` declarations for each node in our `site.pp` manifest. Thanks to the `hiera_include` function, you can assign nodes to a class the same way you can assign values to class parameters: Picking a facter fact on which you want to base a decision and adding to the hierarchy in your `hiera.yaml` file, then writing data sources.
 
 ### Using `hiera_include`
 
@@ -283,7 +284,7 @@ modifying kermit's data source, for instance, to look like this:
 		   ]
 	}
 
-`hiera_include` requires either a string with a single class, or an array of classes to apply to a given node:
+`hiera_include` requires either a string with a single class, or an array of classes to apply to a given node. Take a look at the "classes" array at the top of our kermit data source to see how we might add three classes to kermit:
 
 	{  
 	   "classes" : [
@@ -302,9 +303,26 @@ modifying kermit's data source, for instance, to look like this:
 		   ]
 	}
 
+
+We can test which classes we've assigned to a given node with the Hiera command line tool:
+
+	$ hiera classes fqdn=kermit.acme.com
+	["ntp", "apache", "postfix"]
+
+
 That demonstrates a very simple case for `hiera_include`, where we know that we want to assign a particular node to a specific host. But just as we used the `fqdn` fact to choose which of our nodes received specific parameter values, we can use that or any other fact to drive class assignments. Some organizations might choose to apply the `apache` class to nodes with a given value in their `hostname` fact (e.g. `www`), or assign a `vmware_tools` class that installs and configures VMWare Tools packages on every host that returns `vmware` as the value for its `virtual` fact. 
 
-To configure that last case, for instance, we might change our `hiera.yaml` file to look like this:
+Let's consider that last case: installing VMWare Tools on a virtual guest. There's a [puppet-vmwaretools][] module on the Puppet Forge that addresses just this need. It takes two parameters: 
+
+version
+: The version of VMWare Tools we want to install
+
+working_dir
+: The directory into which we want to install VMWare
+
+Two ways we might want to use Hiera to help us organize our use of the class this module provides include making sure it's applied to all our VMWare virtual hosts, and configuring where it's installed depending on the guest operating system for a given virtual host.
+
+So let's take a look at our `hiera.yaml` file and make provisions for two new data sources. We'll create one based on the `virtual` fact, which will return `vmware` when a node is a VMWare-based guest.  We'll create another based on the `osfamily` fact, which returns the general family to which a node's operating system belongs (e.g. "Debian" for Ubuntu and Debian systems, or "RedHat" for RHEL, CentOS, and Fedora systems):
 
 	---
 	:backends:
@@ -314,14 +332,59 @@ To configure that last case, for instance, we might change our `hiera.yaml` file
 	:hierarchy:
 	  - node/%{::fqdn}
       - virtual/%{::virtual}
+	  - osfamily/%{osfamily}
 	  - common
 
-Then add a `vmware.json` file to the `/etc/puppet/hiera/virtual` directory that includes the following:
+Next, we'll need to create directories for our two new data sources: 
+
+	`mkdir /etc/puppet/hiera/virtual; mkdir /etc/puppet/hiera/osfamily`
+
+In our `virtual` directory, we'll want to create the file `vmware.json`. In this data source, we'll be assigning the `vmwaretools` class, so the file will need to look like this:
 
 	{
-	   "classes" : "vmware_tools"
+	  "classes": "vmwaretools"
 	}
 
+Next, we need to provide the data for the `vmwaretools` class parameters. We'll assume we have a mix of Red Hat and Debian VMs in use in our organization, and that we want to install VMWare Tools in `/opt/vmware` in our Red Hat VMs, and `/usr/local/vmware` for our Debian VMs.  We'll need `RedHat.json` and `Debian.json` files in the `/etc/puppet/hiera/osfamily` directory. 
+
+`RedHat.json` should look like this:
+
+	{
+	  "vmwaretools::working_dir" : "/opt/vmware"
+	}
+
+`Debian.json` should look like this:
+
+	{
+	 "vmwaretools::working_dir" : "/usr/local/vmware"
+	}
+	
+That leaves us with one parameter we haven't covered: the `version` parameter. Since we don't need to vary which version of VMWare Tools any of our VMs are using, we can put that in `common.json`, which should now look like this:
+
+	{  
+       "vmwaretools::version" : "8.6.5-621624",
+	   "ntp::restrict" : true,
+	   "ntp::autoupdate" : true,
+	   "ntp::enable" : true,
+	   "ntp::servers" : [
+		   "grover.acme.com iburst",
+		   "kermit.acme.com iburst"
+		  ]
+	}
+
+Once you've got all that configured, go ahead and test with the Hiera command line tool:
+
+	$ hiera vmwaretools::working_dir osfamily=RedHat
+	/opt/vmware
+	
+	$ hiera vmwaretools::working_dir osfamily=Debian
+	/usr/local/vmware
+	
+	$ hiera vmwaretools::version 
+	8.6.5-621624
+
+	$ hiera classes virtual=vmware
+	vmwaretools
 
 
 
@@ -367,6 +430,7 @@ add to hierarchy:
 		   "3.debian.pool.ntp.org iburst"
 		   ]
 	}
+
 
 
 
