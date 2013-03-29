@@ -264,6 +264,63 @@ Where last we left off, our `site.pp` manifest was looking somewhat spare. With 
 
 	hiera_include('classes')
 
+From this point on, you can add or modify an existing Hiera data source to add an array of classes you'd like to assign to matching nodes. In the simplest case, we can visit each of kermit, grover, and snuffie and add this to their JSON data sources in `/etc/puppet/hiera/node`:
+
+	"classes" : "ntp",
+
+modifying kermit's data source, for instance, to look like this:
+
+	{  
+	   "classes" : "ntp",
+	   "ntp::restrict" : false,
+	   "ntp::autoupdate" : false,
+	   "ntp::enable" : true,
+	   "ntp::servers" : [
+		   "0.us.pool.ntp.org iburst",
+		   "1.us.pool.ntp.org iburst",
+		   "2.us.pool.ntp.org iburst",
+		   "3.us.pool.ntp.org iburst"
+		   ]
+	}
+
+`hiera_include` requires either a string with a single class, or an array of classes to apply to a given node:
+
+	{  
+	   "classes" : [
+		   "ntp",
+		   "apache",
+		   "postfix"
+	   ],
+	   "ntp::restrict" : false,
+	   "ntp::autoupdate" : false,
+	   "ntp::enable" : true,
+	   "ntp::servers" : [
+		   "0.us.pool.ntp.org iburst",
+		   "1.us.pool.ntp.org iburst",
+		   "2.us.pool.ntp.org iburst",
+		   "3.us.pool.ntp.org iburst"
+		   ]
+	}
+
+That demonstrates a very simple case for `hiera_include`, where we know that we want to assign a particular node to a specific host. But just as we used the `fqdn` fact to choose which of our nodes received specific parameter values, we can use that or any other fact to drive class assignments. Some organizations might choose to apply the `apache` class to nodes with a given value in their `hostname` fact (e.g. `www`), or assign a `vmware_tools` class that installs and configures VMWare Tools packages on every host that returns `vmware` as the value for its `virtual` fact. 
+
+To configure that last case, for instance, we might change our `hiera.yaml` file to look like this:
+
+	---
+	:backends:
+	  - json
+	:json:
+	  :datadir: /etc/puppet/hieradata
+	:hierarchy:
+	  - node/%{::fqdn}
+      - virtual/%{::virtual}
+	  - common
+
+Then add a `vmware.json` file to the `/etc/puppet/hiera/virtual` directory that includes the following:
+
+	{
+	   "classes" : "vmware_tools"
+	}
 
 
 
