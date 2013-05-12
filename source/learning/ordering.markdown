@@ -229,3 +229,7 @@ Next
 ----
 
 Now that you can sync resources in their proper order, it's time to make your manifests aware of the outside world with [variables, facts, and conditionals][variables].
+
+You can also consider taking a look at Puppet Enterprise with a [free download][pe_download]: Once you've identified how the package/file/service pattern applies to your own needs, PE offers a way to assign those resources to hundreds of nodes at once from a Web console or with powerful command line tools.
+
+[pe_download]: http://info.puppetlabs.com/download-pe.html?utm_campaign=docs_pe&utm_medium=web&utm_source=docs_site&utm_content=learning_puppet

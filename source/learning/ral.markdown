@@ -154,3 +154,7 @@ Next
 ----
 
 Puppet resource can be useful for one-off jobs, but Puppet was born for greater things. [Time to write some manifests](./manifests.html).
+
+If you'd like to explore Puppet in another direction, you can also try out a [free download of Puppet Enterprise][pe_download], which makes it easy to discover and explore resources across hundreds of systems in your infrastructure in seconds.
+
+[pe_download]: http://info.puppetlabs.com/download-pe.html?utm_campaign=docs_pe&utm_medium=web&utm_source=docs_site&utm_content=learning_puppet
