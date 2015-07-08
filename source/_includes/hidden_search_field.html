@@ -1,0 +1,16 @@
+  {% if page.url contains "/ja/" %}
+    {% assign google_cse_id = '018276284386040486881:be8iaad9i8w' %}
+  {% elsif page.url contains "/es/" %}
+    {% assign google_cse_id = '' %}
+  {% else %}
+    {% assign google_cse_id = '018276284386040486881:wgstg4mh_uq' %}
+  {% endif %}
+  
+  <form action="https://www.google.com/cse" id="cse-search-box">
+      <div>
+          <input type="hidden" name="cx" value="{{google_cse_id}}" />
+          <input type="hidden" name="ie" value="UTF-8" />
+          <input type="text" name="q" class="gsc-input" size="31" />
+          <input type="submit" name="sa" class="searchbtn" value="Search" />
+      </div>
+  </form>
