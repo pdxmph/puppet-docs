@@ -33,4 +33,3 @@ Continue here:
 [http://docs.puppetlabs.com/learning/introduction.html](/learning/introduction.html)
 
 The Learning Puppet VM is suitable for both the new quest-based material and the original tutorials.
-
