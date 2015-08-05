@@ -1,15 +1,21 @@
 ---
 layout: lvm
-title: Thank You for Downloading Puppet Documentation
+title: Thank You for Downloading
 toc: false
 
 ---
 
-<section class="promo-lvm">
-    <h2>Headline</h2>
+<section>
+    <p>This download includes all the documentation for Puppet Enterprise, Open Source Puppet, Hiera, Facter, and more.</p>
 
-    <p>Info about the download</p>
+    <p>If your download does not automatically start <a id="offline-doc" href="https://docs.puppetlabs.com/puppetdocs-latest.tar.gz">click here.</a></p>
+    <script>$('#offline-doc').click();</script>
 
-    <p><a href="#">Link</a> or button to file.</p>
-    
+    <h4>Related Puppet Resources</h4>
+    <ul>
+          <li><a href="http://docs.puppetlabs.com/pe/latest/quick_start.html">Puppet Enterprise Quick Start Guide</a></li>
+          <li><a href="http://docs.puppetlabs.com/guides/module_guides/bgtm.html">Beginner's Guide to Modules</a></li>
+          <li><a href="https://learn.puppetlabs.com/">Puppet Labs Training</a></li>
+          <li><a href="https://puppetlabs.com/puppet/whats-new">What's New in Puppet Enterprise</a></li>
+    </ul>
 </section>
